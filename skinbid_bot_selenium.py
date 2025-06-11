@@ -308,33 +308,33 @@ async def check_items(context):
     except Exception as e:
         logger.error(f"Error in check_items: {e}")
 
+def main():
     """Start the bot."""
+    # Create the Application
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    
+    # Add command handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("stop", stop))
+    application.add_handler(CommandHandler("checknow", checknow))
+
+    # Schedule periodic checks
+    schedule.every(CHECK_INTERVAL_MINUTES).minutes.do(check_items)
+    # Schedule config reload every 5 minutes
+    schedule.every(5).minutes.do(reload_config)
+
+    # Run the bot
+    application.run_polling(
+        drop_pending_updates=True,
+        allowed_updates=Update.ALL_TYPES
+    )
+
+if __name__ == '__main__':
     try:
-        # Create the Application
-        application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-        
-        # Add command handlers
-        application.add_handler(CommandHandler("start", start))
-        application.add_handler(CommandHandler("stop", stop))
-        application.add_handler(CommandHandler("checknow", checknow))
-
-        # Schedule periodic checks
-        schedule.every(CHECK_INTERVAL_MINUTES).minutes.do(check_items)
-        # Schedule config reload every 5 minutes
-        schedule.every(5).minutes.do(reload_config)
-
-        # Run the bot
-        application.run_polling(
-            drop_pending_updates=True,
-            allowed_updates=Update.ALL_TYPES
-        )
-        
+        main()
     except Exception as e:
         logger.error(f"Error starting bot: {e}")
         raise
-
-if __name__ == '__main__':
-    main()
 
 if __name__ == '__main__':
     main()
