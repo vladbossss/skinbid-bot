@@ -1,11 +1,5 @@
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
-from webdriver_manager.chrome import ChromeDriverManager
+import requests
+from bs4 import BeautifulSoup
 from telegram import Update
 from telegram.ext import Application, CommandHandler, CallbackContext
 import schedule
@@ -29,77 +23,50 @@ subscribed_groups = set()
 # Track last notified items to avoid duplicates
 last_notified_items = set()
 
-def setup_driver():
-    """Set up Chrome WebDriver with headless mode."""
-    options = Options()
-    options.add_argument('--headless=new')  # Run in headless mode
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    
-    service = Service(ChromeDriverManager().install())
-    return webdriver.Chrome(service=service, options=options)
-
 def scrape_skinbid():
-    """Scrape SkinBid.com using Selenium."""
+    """Scrape SkinBid.com using requests and BeautifulSoup."""
     try:
-        driver = setup_driver()
         url = "https://skinbid.com/market?sort=created%23desc&take=120&skip=0"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
         
-        try:
-            driver.get(url)
-            
-            # Wait for items to load
-            WebDriverWait(driver, 20).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "[class*='market-item']"))
-            )
-            
-            # Get all items
-            items = driver.find_elements(By.CSS_SELECTOR, "[class*='market-item']")
-            results = []
-            
-            for item in items:
-                try:
-                    # Get item name
-                    name = item.find_element(By.CSS_SELECTOR, "[class*='title']").text
-                    
-                    # Get discount percentage
-                    discount = item.find_element(By.CSS_SELECTOR, "[class*='discount']").text
-                    discount_percent = float(discount.strip('%'))
-                    
-                    # Check if it's a knife or glove
-                    if any(keyword in name.lower() for keyword in ['knife', 'glove']):
-                        if discount_percent >= MIN_DISCOUNT_PERCENTAGE:
-                            # Get link
-                            link = item.find_element(By.TAG_NAME, "a").get_attribute("href")
-                            
-                            results.append({
-                                'name': name,
-                                'discount': discount,
-                                'link': link
-                            })
-                except Exception as e:
-                    logger.error(f"Error processing item: {e}")
-                    continue
-            
-            logger.info(f"Found {len(results)} items meeting criteria")
-            if not results:
-                logger.info("No knives or gloves found with sufficient discount")
-            return results
-        
-        except Exception as e:
-            logger.error(f"Error during scraping: {e}")
+        response = requests.get(url, headers=headers)
+        if response.status_code != 200:
+            logger.error(f"Failed to fetch page: {response.status_code}")
             return []
-        
-        finally:
-            try:
-                driver.quit()
-            except Exception as e:
-                logger.error(f"Error closing driver: {e}")
-    
-    except Exception as e:
-        logger.error(f"Error in scrape_skinbid: {e}")
-        return []
             
+        soup = BeautifulSoup(response.text, 'html.parser')
+        items = soup.select("[class*='market-item']")
+        results = []
+        
+        for item in items:
+            try:
+                name = item.select_one("[class*='title']").text.strip()
+                discount = item.select_one("[class*='discount']").text.strip()
+                discount_percent = float(discount.strip('%'))
+                
+                if any(keyword in name.lower() for keyword in ['knife', 'glove']):
+                    if discount_percent >= MIN_DISCOUNT_PERCENTAGE:
+                        link = item.find('a')['href']
+                        if not link.startswith('http'):
+                            link = f"https://skinbid.com{link}"
+                            
+                        results.append({
+                            'name': name,
+                            'discount': discount,
+                            'link': link
+                        })
+                        logger.info(f"Found item: {name} with discount {discount_percent}%")
+            except Exception as e:
+                logger.error(f"Error processing item: {e}")
+                continue
+        
+        logger.info(f"Found {len(results)} items meeting criteria")
+        if not results:
+            logger.info("No knives or gloves found with sufficient discount")
+        return results
+        
     except Exception as e:
         logger.error(f"Error scraping SkinBid: {e}")
         return []
