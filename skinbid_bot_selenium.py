@@ -43,24 +43,25 @@ def scrape_skinbid():
     """Scrape SkinBid.com using Selenium."""
     try:
         driver = setup_driver()
-        url = "https://skinbid.com/market?sort=created%23desc&sellType=all&take=120&skip=0"
+        # URL to include all listings
+        url = "https://skinbid.com/market?sort=created%23desc&take=120&skip=0"
         
         try:
             driver.get(url)
             
             # Wait for items to load
             WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "app-root"))
+                EC.presence_of_element_located((By.CSS_SELECTOR, "[class*='market-item']"))
             )
             
-            # Get all item containers
-            items = driver.find_elements(By.CSS_SELECTOR, "app-root")
-            
+            # Get all items
+            items = driver.find_elements(By.CSS_SELECTOR, "[class*='market-item']")
             results = []
+            
             for item in items:
                 try:
                     # Get item details
-                    name = item.find_element(By.CSS_SELECTOR, "[class*='item-name']").text
+                    name = item.find_element(By.CSS_SELECTOR, "[class*='title']").text
                     price = item.find_element(By.CSS_SELECTOR, "[class*='price']").text
                     discount = item.find_element(By.CSS_SELECTOR, "[class*='discount']").text
                     
@@ -68,20 +69,32 @@ def scrape_skinbid():
                     if any(keyword in name.lower() for keyword in ['knife', 'glove']):
                         # Check discount
                         discount_percent = float(discount.strip('%'))
+                        logger.info(f"Found item: {name} with discount {discount_percent}%")
                         if discount_percent >= MIN_DISCOUNT_PERCENTAGE:
+                            logger.info(f"Item meets criteria: {name} with discount {discount_percent}%")
                             # Get link
                             link = item.find_element(By.TAG_NAME, "a").get_attribute("href")
+                            
+                            # Get listing type (market or p2p)
+                            try:
+                                listing_type = item.find_element(By.CSS_SELECTOR, "[class*='listing-type']").text
+                            except:
+                                listing_type = "Unknown"
                             
                             results.append({
                                 'name': name,
                                 'price': price,
                                 'discount': discount,
-                                'link': link
+                                'link': link,
+                                'type': listing_type
                             })
                 except Exception as e:
                     logger.error(f"Error processing item: {e}")
                     continue
             
+            logger.info(f"Found {len(results)} items meeting criteria")
+            if not results:
+                logger.info("No knives or gloves found with sufficient discount")
             return results
             
         finally:
@@ -97,7 +110,7 @@ async def start(update: Update, context: CallbackContext) -> None:
     if chat_id not in subscribed_groups:
         subscribed_groups.add(chat_id)
         await update.message.reply_text(
-            'I will now notify this group about new CS2 knives and gloves with 11% or higher discount on SkinBid.com\n'
+            f'I will now notify this group about new CS2 knives and gloves with {MIN_DISCOUNT_PERCENTAGE}% or higher discount on SkinBid.com\n'
             'Use /stop to unsubscribe\n'
             'Use /checknow to check immediately'
         )
@@ -201,3 +214,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
