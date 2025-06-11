@@ -329,8 +329,6 @@ def main():
             logger.error(f"Error creating lock file: {e}")
             return
 
-        try:
-
         # Create the Application
         application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
         
