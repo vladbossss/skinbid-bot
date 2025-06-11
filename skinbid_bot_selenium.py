@@ -308,7 +308,6 @@ async def check_items(context):
     except Exception as e:
         logger.error(f"Error in check_items: {e}")
 
-async def main():
     """Start the bot."""
     try:
         # Create the Application
