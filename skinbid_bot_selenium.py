@@ -31,35 +31,105 @@ def scrape_skinbid():
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
         
+        logger.info(f"Fetching URL: {url}")
         response = requests.get(url, headers=headers)
+        logger.info(f"Response status: {response.status_code}")
+        
         if response.status_code != 200:
             logger.error(f"Failed to fetch page: {response.status_code}")
             return []
             
         soup = BeautifulSoup(response.text, 'html.parser')
-        items = soup.select("[class*='market-item']")
+        logger.info("Parsing HTML...")
+        
+        # Try multiple selectors since the page structure might have changed
+        selectors = [
+            "[class*='market-item']",
+            "[class*='item']",
+            "[class*='product']",
+            "[class*='listing']"
+        ]
+        
+        items = None
+        for selector in selectors:
+            items = soup.select(selector)
+            logger.info(f"Trying selector '{selector}': Found {len(items)} items")
+            if items:
+                break
+        
+        if not items:
+            logger.error("No items found with any selector")
+            return []
+            
         results = []
+        logger.info(f"Processing {len(items)} items...")
         
         for item in items:
             try:
-                name = item.select_one("[class*='title']").text.strip()
-                discount = item.select_one("[class*='discount']").text.strip()
-                discount_percent = float(discount.strip('%'))
+                # Try multiple selectors for name
+                name = None
+                for name_selector in ["[class*='title']", "[class*='name']", "[class*='itemName']"]:
+                    name_elem = item.select_one(name_selector)
+                    if name_elem:
+                        name = name_elem.text.strip()
+                        logger.info(f"Found name with selector '{name_selector}': {name}")
+                        break
                 
+                if not name:
+                    logger.error("Could not find name in item")
+                    continue
+                    
+                # Try multiple selectors for discount
+                discount = None
+                for discount_selector in ["[class*='discount']", "[class*='discountPercentage']", "[class*='discountValue']"]:
+                    discount_elem = item.select_one(discount_selector)
+                    if discount_elem:
+                        discount = discount_elem.text.strip()
+                        logger.info(f"Found discount with selector '{discount_selector}': {discount}")
+                        break
+                
+                if not discount:
+                    logger.error("Could not find discount in item")
+                    continue
+                    
+                try:
+                    discount_percent = float(discount.strip('%'))
+                except ValueError:
+                    logger.error(f"Could not convert discount to float: {discount}")
+                    continue
+                    
+                logger.info(f"Processing item: {name} with discount {discount_percent}%")
+                
+                # Check if it's a knife or glove
                 if any(keyword in name.lower() for keyword in ['knife', 'glove']):
+                    logger.info(f"Found knife/glove: {name}")
+                    
                     if discount_percent >= MIN_DISCOUNT_PERCENTAGE:
-                        link = item.find('a')['href']
-                        if not link.startswith('http'):
-                            link = f"https://skinbid.com{link}"
-                            
-                        results.append({
-                            'name': name,
-                            'discount': discount,
-                            'link': link
-                        })
-                        logger.info(f"Found item: {name} with discount {discount_percent}%")
+                        logger.info(f"Item meets discount criteria: {discount_percent}%")
+                        
+                        # Get link
+                        link = None
+                        for link_elem in item.find_all('a'):
+                            if 'href' in link_elem.attrs:
+                                link = link_elem['href']
+                                if not link.startswith('http'):
+                                    link = f"https://skinbid.com{link}"
+                                break
+                        
+                        if link:
+                            results.append({
+                                'name': name,
+                                'discount': discount,
+                                'link': link
+                            })
+                            logger.info(f"Added item to results: {name}")
+                        else:
+                            logger.error("Could not find link in item")
+                else:
+                    logger.info(f"Skipping non-knife/glove item: {name}")
             except Exception as e:
                 logger.error(f"Error processing item: {e}")
+                logger.error(f"Item HTML: {item.prettify()[:1000]}")
                 continue
         
         logger.info(f"Found {len(results)} items meeting criteria")
