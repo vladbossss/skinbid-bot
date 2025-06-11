@@ -85,14 +85,6 @@ def scrape_skinbid():
             if not results:
                 logger.info("No knives or gloves found with sufficient discount")
             return results
-                except Exception as e:
-                    logger.error(f"Error processing item: {e}")
-                    continue
-            
-            logger.info(f"Found {len(results)} items meeting criteria")
-            if not results:
-                logger.info("No knives or gloves found with sufficient discount")
-            return results
         
         except Exception as e:
             logger.error(f"Error during scraping: {e}")
@@ -107,9 +99,6 @@ def scrape_skinbid():
     except Exception as e:
         logger.error(f"Error in scrape_skinbid: {e}")
         return []
-            
-        finally:
-            driver.quit()
             
     except Exception as e:
         logger.error(f"Error scraping SkinBid: {e}")
