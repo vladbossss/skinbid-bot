@@ -45,7 +45,24 @@ def scrape_skinbid():
                 logger.error(f"Response content (first 500 chars): {response.text[:500]}")
                 return []
             
-        soup = BeautifulSoup(response.text, 'html.parser')
+            # Parse the response
+            soup = BeautifulSoup(response.text, 'html.parser')
+            logger.info("Parsing HTML...")
+            
+            # Log some basic page info
+            logger.info(f"Page title: {soup.title.string if soup.title else 'No title'}")
+            logger.info(f"Page contains {len(soup.find_all('div'))} div elements")
+            logger.info(f"Page contains {len(soup.find_all('a'))} links")
+            logger.info(f"Page contains {len(soup.find_all('span'))} spans")
+            
+            # Log some page content
+            logger.info("First 500 chars of page content:")
+            logger.info(response.text[:500])
+            
+        except Exception as e:
+            logger.error(f"Error processing response: {e}")
+            logger.error(f"Response text: {response.text[:500] if hasattr(response, 'text') else 'No response'}")
+            return []
         logger.info("Parsing HTML...")
         
         # Log some basic page info
