@@ -261,7 +261,7 @@ async def checknow(update: Update, context: CallbackContext) -> None:
                 chat_id=chat_id,
                 text=f"New item found!\n"
                      f"Name: {item['name']}\n"
-                     f"Discount: {item['discount']}\n"
+                     f"Discount: {item['discount']}%\n"
                      f"Link: {item['link']}\n"
                      "---"
             )
@@ -308,7 +308,7 @@ async def check_items(context):
     except Exception as e:
         logger.error(f"Error in check_items: {e}")
 
-def main():
+async def main():
     """Start the bot."""
     try:
         # Create the Application
@@ -327,12 +327,12 @@ def main():
         # Run the bot with error handling
         try:
             # First clear any pending updates
-            updates = application.bot.get_updates(timeout=0)
+            updates = await application.bot.get_updates(timeout=0)
             if updates:
                 logger.info(f"Cleared {len(updates)} pending updates")
                 
             # Start the bot
-            application.run_polling(
+            await application.run_polling(
                 drop_pending_updates=True,
                 allowed_updates=Update.ALL_TYPES,
                 close_loop=True
@@ -349,10 +349,14 @@ def main():
         # Ensure we clean up properly
         if application:
             try:
-                application.stop()
+                await application.stop()
                 logger.info("Application stopped successfully")
             except Exception as e:
                 logger.error(f"Error stopping application: {e}")
+
+if __name__ == '__main__':
+    import asyncio
+    asyncio.run(main())
 
 if __name__ == '__main__':
     main()
