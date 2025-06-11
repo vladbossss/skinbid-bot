@@ -26,39 +26,75 @@ last_notified_items = set()
 def scrape_skinbid():
     """Scrape SkinBid.com using requests and BeautifulSoup."""
     try:
-        url = "https://skinbid.com/market?sort=created%23desc&take=120&skip=0"
+        url = "https://skinbid.com/market?goodDeals=true&sort=created%23desc&sellType=all&take=120&skip=0"
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
         
+        logger.info(f"Starting scraping process...")
         logger.info(f"Fetching URL: {url}")
-        response = requests.get(url, headers=headers)
-        logger.info(f"Response status: {response.status_code}")
         
-        if response.status_code != 200:
-            logger.error(f"Failed to fetch page: {response.status_code}")
-            return []
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            logger.info(f"Response status: {response.status_code}")
+            logger.info(f"Response headers: {dict(response.headers)}")
+            logger.info(f"Response encoding: {response.encoding}")
+            
+            if response.status_code != 200:
+                logger.error(f"Failed to fetch page: {response.status_code}")
+                logger.error(f"Response content (first 500 chars): {response.text[:500]}")
+                return []
             
         soup = BeautifulSoup(response.text, 'html.parser')
         logger.info("Parsing HTML...")
+        
+        # Log some basic page info
+        logger.info(f"Page title: {soup.title.string if soup.title else 'No title'}")
+        logger.info(f"Page contains {len(soup.find_all('div'))} div elements")
         
         # Try multiple selectors since the page structure might have changed
         selectors = [
             "[class*='market-item']",
             "[class*='item']",
             "[class*='product']",
-            "[class*='listing']"
+            "[class*='listing']",
+            "[class*='marketListing']",
+            "[class*='marketEntry']",
+            "[class*='marketRow']",
+            "div[class*='market']",
+            "div[class*='item']",
+            "div[class*='product']"
         ]
+        
+        items = None
+        for selector in selectors:
+            try:
+                items = soup.select(selector)
+                logger.info(f"Trying selector '{selector}': Found {len(items)} items")
+                if items:
+                    logger.info(f"First item HTML structure:")
+                    logger.info(items[0].prettify())
+                    break
+            except Exception as e:
+                logger.error(f"Error using selector '{selector}': {e}")
+        
+        if not items:
+            logger.error("No items found with any selector")
+            logger.error("Full page HTML structure:")
+            logger.error(soup.prettify()[:1000])
+            return []
         
         items = None
         for selector in selectors:
             items = soup.select(selector)
             logger.info(f"Trying selector '{selector}': Found {len(items)} items")
             if items:
+                logger.info(f"First item HTML: {items[0].prettify()[:1000]}")
                 break
         
         if not items:
             logger.error("No items found with any selector")
+            logger.error(f"Full page HTML: {soup.prettify()[:1000]}")
             return []
             
         results = []
@@ -66,39 +102,70 @@ def scrape_skinbid():
         
         for item in items:
             try:
+                # Log item HTML for debugging
+                logger.info(f"Processing item HTML: {item.prettify()[:1000]}")
+                
                 # Try multiple selectors for name
                 name = None
-                for name_selector in ["[class*='title']", "[class*='name']", "[class*='itemName']"]:
-                    name_elem = item.select_one(name_selector)
-                    if name_elem:
-                        name = name_elem.text.strip()
-                        logger.info(f"Found name with selector '{name_selector}': {name}")
-                        break
+                name_selectors = [
+                    "[class*='title']", 
+                    "[class*='name']", 
+                    "[class*='itemName']", 
+                    "[class*='marketName']",
+                    "[class*='itemTitle']",
+                    "[class*='itemName']"
+                ]
+                
+                for name_selector in name_selectors:
+                    try:
+                        name_elem = item.select_one(name_selector)
+                        if name_elem:
+                            name = name_elem.text.strip()
+                            logger.info(f"Found name with selector '{name_selector}': {name}")
+                            break
+                    except Exception as e:
+                        logger.error(f"Error finding name with selector '{name_selector}': {e}")
                 
                 if not name:
                     logger.error("Could not find name in item")
+                    logger.error(f"Tried selectors: {name_selectors}")
                     continue
                     
                 # Try multiple selectors for discount
                 discount = None
-                for discount_selector in ["[class*='discount']", "[class*='discountPercentage']", "[class*='discountValue']"]:
-                    discount_elem = item.select_one(discount_selector)
-                    if discount_elem:
-                        discount = discount_elem.text.strip()
-                        logger.info(f"Found discount with selector '{discount_selector}': {discount}")
-                        break
+                discount_selectors = [
+                    "[class*='discount']", 
+                    "[class*='discountPercentage']", 
+                    "[class*='discountValue']", 
+                    "[class*='marketDiscount']",
+                    "[class*='itemDiscount']"
+                ]
+                
+                for discount_selector in discount_selectors:
+                    try:
+                        discount_elem = item.select_one(discount_selector)
+                        if discount_elem:
+                            discount = discount_elem.text.strip()
+                            logger.info(f"Found discount with selector '{discount_selector}': {discount}")
+                            break
+                    except Exception as e:
+                        logger.error(f"Error finding discount with selector '{discount_selector}': {e}")
                 
                 if not discount:
                     logger.error("Could not find discount in item")
+                    logger.error(f"Tried selectors: {discount_selectors}")
                     continue
                     
                 try:
                     discount_percent = float(discount.strip('%'))
+                    logger.info(f"Successfully parsed discount: {discount_percent}%")
                 except ValueError:
                     logger.error(f"Could not convert discount to float: {discount}")
                     continue
                     
                 logger.info(f"Processing item: {name} with discount {discount_percent}%")
+                logger.info(f"Item HTML structure:")
+                logger.info(item.prettify())
                 
                 # Check if it's a knife or glove
                 if any(keyword in name.lower() for keyword in ['knife', 'glove']):
