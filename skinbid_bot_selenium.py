@@ -229,7 +229,7 @@ def main():
     try:
         # Create the Application
         application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-
+        
         # Add command handlers
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("stop", stop))
@@ -240,14 +240,35 @@ def main():
         # Schedule config reload every 5 minutes
         schedule.every(5).minutes.do(reload_config)
 
-        # Run the bot
-        application.run_polling(
-            drop_pending_updates=True,
-            allowed_updates=Update.ALL_TYPES
-        )
+        # Run the bot with error handling
+        try:
+            # First clear any pending updates
+            updates = application.bot.get_updates(timeout=0)
+            if updates:
+                logger.info(f"Cleared {len(updates)} pending updates")
+                
+            # Start the bot
+            application.run_polling(
+                drop_pending_updates=True,
+                allowed_updates=Update.ALL_TYPES,
+                close_loop=True
+            )
+            
+        except Exception as e:
+            logger.error(f"Error in polling: {e}")
+            raise
+            
     except Exception as e:
         logger.error(f"Error starting bot: {e}")
         raise
+    finally:
+        # Ensure we clean up properly
+        if application:
+            try:
+                application.stop()
+                logger.info("Application stopped successfully")
+            except Exception as e:
+                logger.error(f"Error stopping application: {e}")
 
 if __name__ == '__main__':
     main()
