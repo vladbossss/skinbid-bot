@@ -311,6 +311,18 @@ async def check_items(context):
 def main():
     """Start the bot."""
     try:
+        # Check if another instance is running
+        try:
+            # Try to get updates with a very short timeout
+            bot = Application.builder().token(TELEGRAM_BOT_TOKEN).build().bot
+            updates = bot.get_updates(timeout=1)
+            logger.info("No active instances found. Starting new instance...")
+        except telegram.error.Conflict:
+            logger.error("Another instance of this bot is already running. Stopping this instance.")
+            return
+        except Exception as e:
+            logger.warning(f"Error checking for active instances: {e}")
+
         # Create the Application
         application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
         
