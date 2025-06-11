@@ -5,6 +5,8 @@ from telegram.ext import Application, CommandHandler, CallbackContext
 import schedule
 import time
 import logging
+import os
+import fcntl
 from config import TELEGRAM_BOT_TOKEN, MIN_DISCOUNT_PERCENTAGE, CHECK_INTERVAL_MINUTES
 
 # Configure logging
@@ -311,17 +313,23 @@ async def check_items(context):
 def main():
     """Start the bot."""
     try:
-        # Check if another instance is running
+        # Create lock file path
+        lock_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bot.lock')
+        
+        # Try to acquire lock
         try:
-            # Try to get updates with a very short timeout
-            bot = Application.builder().token(TELEGRAM_BOT_TOKEN).build().bot
-            updates = bot.get_updates(timeout=1)
-            logger.info("No active instances found. Starting new instance...")
-        except telegram.error.Conflict:
-            logger.error("Another instance of this bot is already running. Stopping this instance.")
-            return
+            fd = os.open(lock_file, os.O_CREAT | os.O_RDWR)
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                logger.info("Successfully acquired lock. Starting new instance...")
+            except (IOError, OSError):
+                logger.error("Another instance of this bot is already running. Stopping this instance.")
+                return
         except Exception as e:
-            logger.warning(f"Error checking for active instances: {e}")
+            logger.error(f"Error creating lock file: {e}")
+            return
+
+        try:
 
         # Create the Application
         application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
@@ -357,6 +365,14 @@ def main():
     except Exception as e:
         logger.error(f"Error starting bot: {e}")
         raise
+    finally:
+        # Release the lock
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
+            os.unlink(lock_file)
+        except Exception as e:
+            logger.error(f"Error releasing lock: {e}")
 
 if __name__ == '__main__':
     try:
