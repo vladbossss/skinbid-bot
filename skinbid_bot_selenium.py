@@ -1,4 +1,4 @@
-from selenium import webdriver
+rom selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -43,14 +43,13 @@ def scrape_skinbid():
     """Scrape SkinBid.com using Selenium."""
     try:
         driver = setup_driver()
-        # URL to include all listings
         url = "https://skinbid.com/market?sort=created%23desc&take=120&skip=0"
         
         try:
             driver.get(url)
             
             # Wait for items to load
-            WebDriverWait(driver, 10).until(
+            WebDriverWait(driver, 20).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, "[class*='market-item']"))
             )
             
@@ -60,33 +59,23 @@ def scrape_skinbid():
             
             for item in items:
                 try:
-                    # Get item details
+                    # Get item name
                     name = item.find_element(By.CSS_SELECTOR, "[class*='title']").text
-                    price = item.find_element(By.CSS_SELECTOR, "[class*='price']").text
+                    
+                    # Get discount percentage
                     discount = item.find_element(By.CSS_SELECTOR, "[class*='discount']").text
+                    discount_percent = float(discount.strip('%'))
                     
                     # Check if it's a knife or glove
                     if any(keyword in name.lower() for keyword in ['knife', 'glove']):
-                        # Check discount
-                        discount_percent = float(discount.strip('%'))
-                        logger.info(f"Found item: {name} with discount {discount_percent}%")
                         if discount_percent >= MIN_DISCOUNT_PERCENTAGE:
-                            logger.info(f"Item meets criteria: {name} with discount {discount_percent}%")
                             # Get link
                             link = item.find_element(By.TAG_NAME, "a").get_attribute("href")
                             
-                            # Get listing type (market or p2p)
-                            try:
-                                listing_type = item.find_element(By.CSS_SELECTOR, "[class*='listing-type']").text
-                            except:
-                                listing_type = "Unknown"
-                            
                             results.append({
                                 'name': name,
-                                'price': price,
                                 'discount': discount,
-                                'link': link,
-                                'type': listing_type
+                                'link': link
                             })
                 except Exception as e:
                     logger.error(f"Error processing item: {e}")
@@ -96,6 +85,28 @@ def scrape_skinbid():
             if not results:
                 logger.info("No knives or gloves found with sufficient discount")
             return results
+                except Exception as e:
+                    logger.error(f"Error processing item: {e}")
+                    continue
+            
+            logger.info(f"Found {len(results)} items meeting criteria")
+            if not results:
+                logger.info("No knives or gloves found with sufficient discount")
+            return results
+        
+        except Exception as e:
+            logger.error(f"Error during scraping: {e}")
+            return []
+        
+        finally:
+            try:
+                driver.quit()
+            except Exception as e:
+                logger.error(f"Error closing driver: {e}")
+    
+    except Exception as e:
+        logger.error(f"Error in scrape_skinbid: {e}")
+        return []
             
         finally:
             driver.quit()
@@ -139,10 +150,10 @@ async def checknow(update: Update, context: CallbackContext) -> None:
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"New item found!\n"
-                f"Name: {item['name']}\n"
-                f"Price: {item['price']}\n"
-                f"Discount: {item['discount']}%\n"
-                f"Link: {item['link']}"
+                     f"Name: {item['name']}\n"
+                     f"Discount: {item['discount']}\n"
+                     f"Link: {item['link']}\n"
+                     "---"
             )
     else:
         await context.bot.send_message(chat_id=chat_id, text="No items found with 11% or higher discount.")
@@ -214,4 +225,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
