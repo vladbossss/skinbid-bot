@@ -310,24 +310,41 @@ async def check_items(context):
 
 def main():
     """Start the bot."""
-    # Create the Application
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-    
-    # Add command handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("stop", stop))
-    application.add_handler(CommandHandler("checknow", checknow))
+    try:
+        # Create the Application
+        application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+        
+        # Add command handlers
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("stop", stop))
+        application.add_handler(CommandHandler("checknow", checknow))
 
-    # Schedule periodic checks
-    schedule.every(CHECK_INTERVAL_MINUTES).minutes.do(check_items)
-    # Schedule config reload every 5 minutes
-    schedule.every(5).minutes.do(reload_config)
+        # Schedule periodic checks
+        schedule.every(CHECK_INTERVAL_MINUTES).minutes.do(check_items)
+        # Schedule config reload every 5 minutes
+        schedule.every(5).minutes.do(reload_config)
 
-    # Run the bot
-    application.run_polling(
-        drop_pending_updates=True,
-        allowed_updates=Update.ALL_TYPES
-    )
+        # Add error handler
+        async def error_handler(update: Update, context: CallbackContext) -> None:
+            logger.error(f"Error while handling update: {context.error}")
+            logger.error(f"Update that caused error: {update}")
+        
+        application.add_error_handler(error_handler)
+
+        # Run the bot
+        application.run_polling(
+            drop_pending_updates=True,
+            allowed_updates=Update.ALL_TYPES,
+            close_loop=True
+        )
+        
+    except telegram.error.Conflict as e:
+        logger.error(f"Bot conflict error: {e}")
+        logger.error("Another instance of this bot is already running. Stopping this instance.")
+        return
+    except Exception as e:
+        logger.error(f"Error starting bot: {e}")
+        raise
 
 if __name__ == '__main__':
     try:
